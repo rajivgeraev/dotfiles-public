@@ -1,0 +1,50 @@
+[user]
+	name = {{ .name }}
+	email = {{ .email }}
+	signingkey = {{ .chezmoi.homeDir }}/.ssh/id_ed25519_gh.pub
+
+# Подпись коммитов SSH-ключом.
+# Выключена намеренно: id_ed25519_gh защищён паролем, и пока он не загружен
+# в ssh-agent, каждый commit будет требовать ввода пароля.
+# Включить: ssh-add --apple-use-keychain ~/.ssh/id_ed25519_gh
+#           затем commit.gpgsign = true
+# Ключ также нужно добавить на GitHub отдельно, как Signing Key
+# (Settings -> SSH and GPG keys -> New SSH key -> Key type: Signing Key).
+[gpg]
+	format = ssh
+[commit]
+	gpgsign = false
+[tag]
+	gpgsign = false
+
+[init]
+	defaultBranch = main
+
+[push]
+	autoSetupRemote = true
+	followTags = true
+[pull]
+	rebase = true
+[fetch]
+	prune = true
+	pruneTags = true
+[rebase]
+	autoStash = true
+	autoSquash = true
+
+[merge]
+	conflictStyle = zdiff3
+[diff]
+	algorithm = histogram
+	colorMoved = zebra
+	mnemonicPrefix = true
+[rerere]
+	enabled = true
+	autoUpdate = true
+
+[branch]
+	sort = -committerdate
+[column]
+	ui = auto
+[help]
+	autocorrect = prompt

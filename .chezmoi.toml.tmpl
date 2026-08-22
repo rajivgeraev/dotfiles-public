@@ -1,0 +1,10 @@
+# Шаблон собственного конфига chezmoi. Рендерится один раз при `chezmoi init`
+# в ~/.config/chezmoi/chezmoi.toml.
+#
+# Секции [age]/encryption здесь намеренно нет: репозиторий публичный, поэтому
+# секреты не хранятся в нём вообще — ни в открытом виде, ни в зашифрованном.
+# Что и куда класть при восстановлении — см. restore-secrets.sh и README.
+
+[data]
+  name  = "Rajiv Geraev"
+  email = "rajiv.geraev@gmail.com"

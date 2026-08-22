@@ -1,0 +1,11 @@
+{
+  "model": "opus",
+  "language": "Russian",
+  "tui": "fullscreen",
+  "voice": {
+    "enabled": true,
+    "mode": "hold"
+  },
+  "theme": "dark",
+  "voiceEnabled": true
+}
