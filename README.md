@@ -52,9 +52,9 @@ dotfiles/
 ├── .chezmoiversion                          # минимальная версия chezmoi
 ├── .chezmoiexternal.toml                    # темы Catppuccin: chezmoi качает и кэширует их сам
 ├── .chezmoiscripts/                         # скрипты; не создают записей в целевом каталоге
-│   ├── run_once_before_install-brewfile.sh.tmpl    # brew bundle, выполняется первым
-│   ├── run_onchange_after_rebuild-bat-cache.sh.tmpl  # bat cache --build после тем и синтаксисов
-│   └── run_onchange_after_set-macos-defaults.sh.tmpl # defaults write, выполняется последним
+│   ├── run_onchange_after_10-install-brewfile.sh.tmpl  # brew bundle (Homebrew — предусловие)
+│   ├── run_onchange_after_20-rebuild-bat-cache.sh.tmpl # bat cache --build после тем и синтаксисов
+│   └── run_onchange_after_30-set-macos-defaults.sh.tmpl # defaults write, идёт последним
 ├── Brewfile                                  # список CLI-пакетов и GUI-приложений (casks)
 ├── restore-secrets.sh                        # раскладывает секреты из бэкапа (их нет в репозитории)
 ├── CLAUDE.md / CLAUDE.ru.md                  # инструкции для Claude Code (англ/рус)
@@ -114,21 +114,41 @@ git --version
 `git` не найден в `$PATH`, и он заметно ограниченнее системного. Проще убедиться, что CLT на месте,
 чем разбираться потом.
 
-### 2. Применить всё одной командой
+### 2. Homebrew
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+**Установщик спросит пароль администратора** — он нужен, чтобы создать `/opt/homebrew`.
+
+Homebrew намеренно вынесен в предусловие, а не ставится изнутри chezmoi. Скрипт, который сам
+запрашивает `sudo`, — плохой паттерн: непонятно, что именно потребует привилегий. Здесь пароль
+спрашивает официальный установщик Homebrew, в вашем терминале, и это единственное место в
+процедуре, где он нужен для системных изменений.
+
+После установки выполните строчку `eval "$(...)"`, которую напечатает установщик, — иначе `brew`
+не окажется в `$PATH` текущей сессии.
+
+### 3. Применить всё одной командой
 ```bash
 sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply \
   https://github.com/rajivgeraev/dotfiles-public.git
 ```
 Выполнится автоматически, по порядку:
 1. поставит chezmoi и склонирует репозиторий (авторизация не нужна — репозиторий публичный)
-2. `.chezmoiscripts/run_once_before_install-brewfile.sh.tmpl`: **спросит пароль администратора**
-   (нужен, чтобы установщик Homebrew создал `/opt/homebrew`), поставит Homebrew, если его ещё нет,
-   затем весь Brewfile — CLI-инструменты и GUI-приложения
-3. создаст все конфиги в `~/.config/`
-4. скачает темы Catppuccin (`.chezmoiexternal.toml`)
-5. `run_onchange_after_rebuild-bat-cache.sh.tmpl`: пересоберёт кеш bat
-6. `run_onchange_after_set-macos-defaults.sh.tmpl`: применит настройки macOS
+2. создаст все конфиги в `~/.config/` и скачает темы Catppuccin (`.chezmoiexternal.toml`)
+3. `run_onchange_after_10-install-brewfile.sh.tmpl`: поставит весь Brewfile — CLI-инструменты и
+   GUI-приложения. **Один раз спросит пароль администратора** на каске `karabiner-elements`: он
+   единственный из девяти ставится через `.pkg`, остальные — обычные `.app` и привилегий не требуют
+4. `run_onchange_after_20-rebuild-bat-cache.sh.tmpl`: пересоберёт кеш bat
+5. `run_onchange_after_30-set-macos-defaults.sh.tmpl`: применит настройки macOS
    (Finder/Dock/меню-бар/звук), идёт последним
+
+Числовые префиксы `10-`/`20-`/`30-` задают порядок явно, а не через алфавитную сортировку имён.
+
+> **Конфиги применяются раньше пакетов — так и задумано.** Если `brew bundle` частично упадёт
+> (обычно из-за сети), restore не прервётся: конфиги уже на диске, а недоустановленный инструмент
+> просто не включится, потому что `conf.d/*.zsh` гейтят каждый через `command -v` при запуске шелла.
+> Скрипт напечатает предупреждение и команду для повторной попытки.
 
 Ничего повторно запускать не нужно — `.zshrc`/`conf.d/*.zsh` гейтят каждый инструмент через
 `command -v` в момент запуска шелла, а не на этапе `apply`, так что корректно собираются с первого
@@ -145,7 +165,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply \
 > каждый пакет построчно. Если всё равно кажется, что зависло — в другом окне терминала
 > `ps aux | grep -E 'brew|curl'`: если процессы есть, значит просто качает.
 
-### 3. Восстановить секреты из резервной копии
+### 4. Восстановить секреты из резервной копии
 В репозитории их нет, поэтому раскладываем вручную — одной командой, с правильными правами:
 ```bash
 ~/.local/share/chezmoi/restore-secrets.sh /path/to/backup/secrets
@@ -155,23 +175,23 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply \
 | в бэкапе | куда | зачем |
 |---|---|---|
 | `rclone.conf` | `~/.config/rclone/rclone.conf` | удалённые хранилища |
-| `atuin-key` | `~/.local/share/atuin/key` | E2E-ключ истории (шаг 5) |
+| `atuin-key` | `~/.local/share/atuin/key` | E2E-ключ истории (шаг 6) |
 | `id_ed25519_gh` | `~/.ssh/id_ed25519_gh` | ключ для GitHub |
 
 Права выставляются явно: раньше это делал chezmoi через префикс `private_`, пока секреты лежали
 в репозитории.
 
-Публичный ключ (`~/.ssh/id_ed25519_gh.pub`) и `~/.ssh/config` восстановились шагом 2 — они не секретны.
+Публичный ключ (`~/.ssh/id_ed25519_gh.pub`) и `~/.ssh/config` восстановились шагом 3 — они не секретны.
 После этого шага `git push` в репозиторий работает по SSH.
 
-### 4. Переключить origin на SSH
+### 5. Переключить origin на SSH
 `init` склонировал по HTTPS, что для публичного репозитория нормально, но для записи нужен SSH —
-ключ уже на месте после шага 3:
+ключ уже на месте после шага 4:
 ```bash
 git -C ~/.local/share/chezmoi remote set-url origin git@github.com:rajivgeraev/dotfiles-public.git
 ```
 
-### 4a. Проверить результат
+### 5a. Проверить результат
 **Откройте новое окно терминала.** Установщик `get.chezmoi.io` кладёт бинарник в `./bin/chezmoi`
 относительно текущего каталога, а не в `$PATH`; полноценный `chezmoi` появляется из Brewfile в
 `/opt/homebrew/bin`, и этот путь попадает в `$PATH` только через `.zprofile` — то есть в новом шелле.
@@ -187,9 +207,9 @@ chezmoi verify   # сверяет $HOME с source state, код возврата
 > (обычное дело после `apply --exclude=scripts`), а `MM` — настоящее расхождение файла.
 > Отделить одно от другого: `chezmoi verify --exclude=scripts`.
 
-### 5. Войти в Atuin (история шелла из облака)
+### 6. Войти в Atuin (история шелла из облака)
 История зашифрована end-to-end ключом, который лежит только локально (`~/.local/share/atuin/key`,
-восстанавливается шагом 3). Без ключа `atuin login` не расшифрует историю, даже зная пароль.
+восстанавливается шагом 4). Без ключа `atuin login` не расшифрует историю, даже зная пароль.
 Пароль от аккаунта в репозитории **не хранится** (у CLI нет входа по токену — только `-u`/`-p`/`-k`, проверено
 на актуальной версии) — вводится вручную при запуске:
 ```bash
@@ -200,15 +220,15 @@ atuin sync
 сразу (следующий периодический синк — раз в 5 минут). Явный `atuin sync` сразу после логина гарантированно
 подтягивает всю историю сейчас, а не когда-нибудь.
 
-### 6. Открыть Ghostty
+### 7. Открыть Ghostty
 При первом запуске antidote автоматически скачает zsh-плагины.
 
-### 7. Karabiner-Elements: выдать разрешения macOS
-Сам конфиг уже восстановлен шагом 4, но Accessibility и Driver Extensions выдаются только вручную,
+### 8. Karabiner-Elements: выдать разрешения macOS
+Сам конфиг уже восстановлен шагом 3, но Accessibility и Driver Extensions выдаются только вручную,
 через System Settings — см. раздел [«Karabiner-Elements»](#karabiner-elements-переключение-раскладки-по-cmd)
 ниже и подробный разбор в [`karabiner-recovery.md`](karabiner-recovery.md).
 
-### 8. Продолжить настройку через Claude Code
+### 9. Продолжить настройку через Claude Code
 ```bash
 cd ~/.local/share/chezmoi
 claude
@@ -258,7 +278,7 @@ chezmoi update
 | `~/.local/share/atuin/key` | ключ E2E-шифрования истории команд |
 | `~/.ssh/id_ed25519_gh` | приватный SSH-ключ |
 
-Все три хранятся в менеджере паролей и раскладываются `restore-secrets.sh` (см. шаг 3 восстановления).
+Все три хранятся в менеджере паролей и раскладываются `restore-secrets.sh` (см. шаг 4 восстановления).
 Публичная часть ключа и `~/.ssh/config` секретами не являются и лежат в репозитории как обычные файлы.
 
 ### Правило при добавлении нового конфига

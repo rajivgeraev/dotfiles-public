@@ -46,9 +46,14 @@ for item in "${ITEMS[@]}"; do
     continue
   fi
 
-  mkdir -p "$(dirname "$dest")"
+  dir=$(dirname "$dest")
+  mkdir -p "$dir"
+  # ~/.ssh обязан быть 0700, иначе ssh откажется работать с ключом.
+  # mkdir -p оставил бы 0755, поэтому выставляем явно для всех каталогов
+  # с секретами — лишним не будет.
+  chmod 700 "$dir"
   install -m 600 "$src" "$dest"
-  echo "ok  $name -> $dest (0600)"
+  echo "ok  $name -> $dest (файл 0600, каталог 0700)"
 done
 
 echo
