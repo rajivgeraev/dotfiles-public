@@ -40,9 +40,8 @@ with `antidote-post`) loads `.zsh_plugins_post.txt` — fzf-tab first, then auto
 syntax-highlighting last. Order within a phase is still irrelevant; order inside `.zsh_plugins_post.txt` is not.
 Follow this pattern when adding config for a new optional CLI tool. This replaced an earlier `lookPath`-in-template
 design specifically because `lookPath` checks chezmoi's *own process* `$PATH`, frozen at the moment `chezmoi
-apply` started — on a from-scratch bootstrap where the same `run_once_before_install-brewfile.sh.tmpl` script
-installs Homebrew itself moments earlier in the *same* apply run, that check would go stale and render the block
-empty. A runtime `command -v` check is evaluated fresh every shell startup, so it's correct on the very first
+apply` started — on a from-scratch bootstrap, `bootstrap.sh` installs Homebrew and every tool moments before
+chezmoi even runs, so a template-time check would go stale and render the block empty. A runtime `command -v` check is evaluated fresh every shell startup, so it's correct on the very first
 pass regardless of install order — see the memory note on this redesign for the full reasoning.
 
 ## Application order
@@ -52,27 +51,23 @@ Day-to-day command reference (`chezmoi diff`/`apply`/`edit`/`add`/`update`) is i
 
 All scripts live in `.chezmoiscripts/`, so they execute normally but create no entries in the target state.
 
-`chezmoi apply`/`init --apply` runs, in this order: `run_once_before_install-brewfile.sh.tmpl`
-(pre-authenticates `sudo` and keeps the timestamp alive — the Homebrew installer needs sudo to create its
-prefix while `NONINTERACTIVE=1` forbids it from asking, which deadlocks on a fresh machine; then self-installs
-Homebrew if `command -v brew` fails, detects the prefix `/opt/homebrew` vs `/usr/local`, and runs `brew bundle`
-against `Brewfile` — installs *all* CLI formulae and GUI casks; runs first so every other script/template
-below sees the tools as already installed), then regular files, templates and externals, then the two
-`after_` scripts: `run_onchange_after_rebuild-bat-cache.sh.tmpl` (`bat cache --build`, triggered by hashes of
-`.chezmoiexternal.toml` and the syntax file) and `run_onchange_after_set-macos-defaults.sh.tmpl`
-(`defaults write` for Finder/Dock/menu bar/system sound).
+**Installing software is not chezmoi's job.** `bootstrap.sh` at the repository root is a separate,
+imperative step run once on a clean machine: Xcode CLT, Homebrew, then `brew bundle` against `Brewfile`.
+It is listed in `.chezmoiignore` so it never lands in `$HOME`. The split exists because installation is a
+one-shot imperative act while chezmoi models a desired end state it converges to repeatedly — while they
+were merged, `chezmoi verify` reported on package installation and one flaky cask aborted the whole restore.
+
+`chezmoi apply`/`init --apply` therefore runs: regular files, templates and externals first, then the two
+`after_` scripts in numeric order — `run_onchange_after_20-rebuild-bat-cache.sh.tmpl` (`bat cache --build`,
+triggered by hashes of `.chezmoiexternal.toml` and the syntax file) and
+`run_onchange_after_30-set-macos-defaults.sh.tmpl` (`defaults write` for Finder/Dock/menu bar/system sound).
+Numeric prefixes state the order outright instead of relying on ASCII sorting of names; the gap at `10-` is
+where the Brewfile script used to be.
 
 Themes are declared in `.chezmoiexternal.toml` rather than downloaded by a script: chezmoi caches them,
 verifies their contents on every apply/diff/verify, and a network hiccup no longer aborts the whole apply.
 The bat cache rebuild is `after_` on purpose — it must see the theme and syntax files already on disk;
 relying on ASCII ordering for that was fragile.
-
-Self-installing Homebrew from *within* that first script only works because nothing downstream depends on
-chezmoi's own process `$PATH` seeing the result — see the `conf.d` runtime-gating note above. A child script
-installing Homebrew can't widen its parent chezmoi process's `$PATH` anyway (child env changes never propagate
-to the parent), so this ordering guarantee is about file/script sequencing, not about `$PATH` visibility.
-
-## Secrets
 
 This repository is **public and contains no secrets at all** — not in plaintext, and not encrypted either.
 Encryption protects contents, but published ciphertext is downloadable forever and decrypts retroactively
